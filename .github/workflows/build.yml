@@ -1,139 +1,228 @@
-name: Build SHAHierarchyDump
+name: Build SHAHierarchyDump RootHide
 
 on:
   workflow_dispatch:
 
-
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: macos-14
 
     steps:
+
+      # ==========================================
+      # CHECKOUT
+      # ==========================================
+
       - name: Checkout
         uses: actions/checkout@v4
 
+
+      # ==========================================
+      # DEPENDENCIES
+      # ==========================================
+
       - name: Install dependencies
         run: |
-          sudo apt-get update
+          set -e
 
-          sudo apt-get install -y \
-            build-essential \
-            clang \
-            git \
-            curl \
-            wget \
-            unzip \
-            xz-utils \
-            fakeroot \
-            perl \
-            ldid \
-            dpkg-dev
+          brew update
 
-      - name: Install Theos
+          brew install ldid
+
+
+      # ==========================================
+      # ROOT HIDE THEOS
+      # ==========================================
+
+      - name: Install RootHide Theos
         run: |
-          export THEOS="$HOME/theos"
+          set -e
 
-          git clone --recursive --depth=1 \
-            https://github.com/theos/theos.git \
-            "$THEOS"
+          git clone --recursive \
+            https://github.com/roothide/theos.git \
+            "$GITHUB_WORKSPACE/theos"
 
-          echo "THEOS=$THEOS" >> "$GITHUB_ENV"
+          echo "THEOS=$GITHUB_WORKSPACE/theos" \
+            >> "$GITHUB_ENV"
 
-      - name: Install iOS toolchain
+
+      # ==========================================
+      # THEOS SDKS
+      # ==========================================
+
+      - name: Download Theos SDK repository
         run: |
-          cd "$THEOS"
+          set -e
 
-          echo "Installing Theos iOS toolchain..."
+          git clone --depth 1 \
+            https://github.com/theos/sdks.git \
+            "$GITHUB_WORKSPACE/sdks"
 
-          mkdir -p "$THEOS/toolchain"
 
-          curl -L \
-            --fail \
-            --retry 3 \
-            -o /tmp/iOSToolchain.tar.xz \
-            https://github.com/theos/llvm-project/releases/latest/download/iOSToolchain.tar.xz
+      # ==========================================
+      # INSTALL IPHONEOS SDK
+      # ==========================================
 
-          file /tmp/iOSToolchain.tar.xz
-
-          tar -xJf /tmp/iOSToolchain.tar.xz \
-            -C "$THEOS/toolchain"
-
-      - name: Install iOS SDK
+      - name: Install iPhoneOS SDK
         run: |
+          set -e
+
           mkdir -p "$THEOS/sdks"
 
-          git clone --depth=1 \
-            https://github.com/theos/sdks.git \
-            /tmp/theos-sdks
-
-          echo "Available SDKs:"
-          find /tmp/theos-sdks \
+          SDK=$(find "$GITHUB_WORKSPACE/sdks" \
             -maxdepth 1 \
             -type d \
-            -name 'iPhoneOS*.sdk' \
-            -print
+            -name "iPhoneOS*.sdk" \
+            | sort -V \
+            | tail -n 1)
 
-          if [ -d "/tmp/theos-sdks/iPhoneOS16.5.sdk" ]; then
-            cp -R \
-              "/tmp/theos-sdks/iPhoneOS16.5.sdk" \
-              "$THEOS/sdks/"
-          else
-            echo "iPhoneOS16.5.sdk not found."
+          if [ -z "$SDK" ]; then
+
+            echo "ERROR: iPhoneOS SDK not found."
+
+            find "$GITHUB_WORKSPACE/sdks" \
+              -maxdepth 2 \
+              -type d \
+              -name "*.sdk"
+
             exit 1
+
           fi
+
+          echo "================================"
+          echo "Using SDK"
+          echo "================================"
+
+          echo "$SDK"
+
+          cp -R "$SDK" "$THEOS/sdks/"
+
+
+      # ==========================================
+      # VERIFY THEOS
+      # ==========================================
 
       - name: Verify Theos
         run: |
-          echo "======================================"
+          set -e
+
+          echo "================================"
           echo "THEOS"
-          echo "======================================"
+          echo "================================"
 
           echo "$THEOS"
 
+          test -f \
+            "$THEOS/makefiles/common.mk"
+
+          echo "Theos OK."
+
           echo
-          echo "======================================"
-          echo "SDK"
-          echo "======================================"
+          echo "================================"
+          echo "SDKs"
+          echo "================================"
 
           find "$THEOS/sdks" \
             -maxdepth 1 \
             -type d \
-            -name '*.sdk' \
+            -name "iPhoneOS*.sdk" \
             -print
+
+
+      # ==========================================
+      # VERIFY ROOT HIDE SCHEME
+      # ==========================================
+
+      - name: Verify RootHide package scheme
+        run: |
+          set -e
+
+          echo "Checking RootHide Theos..."
+
+          grep -R \
+            "roothide" \
+            "$THEOS/makefiles" \
+            | head -n 20 || true
 
           echo
-          echo "======================================"
-          echo "CLANG"
-          echo "======================================"
+          echo "RootHide Theos ready."
 
-          "$THEOS/toolchain/linux/iphone/bin/clang" \
-            --version
 
-      - name: Build
+      # ==========================================
+      # BUILD ROOT HIDE DEB
+      # ==========================================
+
+      - name: Build RootHide package
         run: |
+          set -e
+
+          export THEOS="$GITHUB_WORKSPACE/theos"
+
           make clean
-          make package FINALPACKAGE=1
 
-      - name: List output
+          make package \
+            FINALPACKAGE=1 \
+            THEOS_PACKAGE_SCHEME=roothide
+
+
+      # ==========================================
+      # VERIFY DEB
+      # ==========================================
+
+      - name: Verify generated DEB
         run: |
-          echo "======================================"
-          echo "BUILD OUTPUT"
-          echo "======================================"
+          set -e
 
-          find . \
+          echo
+          echo "================================"
+          echo "Generated DEB"
+          echo "================================"
+
+          find "$GITHUB_WORKSPACE/packages" \
             -type f \
-            \( \
-              -name "*.deb" \
-              -o \
-              -name "*.dylib" \
-            \) \
+            -name "*.deb" \
             -print
 
-      - name: Upload package
+          DEB=$(find \
+            "$GITHUB_WORKSPACE/packages" \
+            -type f \
+            -name "*.deb" \
+            | head -n 1)
+
+          if [ -z "$DEB" ]; then
+
+            echo "ERROR: No DEB generated."
+
+            exit 1
+
+          fi
+
+          echo
+          echo "DEB FILE:"
+          echo "$DEB"
+
+          echo
+          echo "FILE INFORMATION:"
+
+          file "$DEB"
+
+          echo
+          echo "SIZE:"
+
+          ls -lh "$DEB"
+
+
+      # ==========================================
+      # UPLOAD REAL DEB
+      # ==========================================
+
+      - name: Upload RootHide DEB
         uses: actions/upload-artifact@v4
+
         with:
-          name: SHAHierarchyDump
-          path: |
-            packages/*.deb
-            packages/*.dylib
+
+          name: SHAHierarchyDump-RootHide-DEB
+
+          path: packages/*.deb
+
           if-no-files-found: error
