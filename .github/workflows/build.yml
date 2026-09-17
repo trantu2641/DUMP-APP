@@ -3,6 +3,7 @@ name: Build SHAHierarchyDump
 on:
   workflow_dispatch:
 
+
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -14,106 +15,121 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
+
           sudo apt-get install -y \
-            git \
+            build-essential \
             clang \
-            llvm \
-            lld \
-            make \
+            git \
             curl \
             wget \
             unzip \
             xz-utils \
-            python3 \
+            fakeroot \
+            perl \
+            ldid \
             dpkg-dev
 
       - name: Install Theos
         run: |
-          git clone --recursive \
+          export THEOS="$HOME/theos"
+
+          git clone --recursive --depth=1 \
             https://github.com/theos/theos.git \
-            $HOME/theos
+            "$THEOS"
 
-      - name: Install Theos dependencies
+          echo "THEOS=$THEOS" >> "$GITHUB_ENV"
+
+      - name: Install iOS toolchain
         run: |
-          export THEOS=$HOME/theos
+          cd "$THEOS"
 
-          git clone https://github.com/theos/sdks.git \
+          echo "Installing Theos iOS toolchain..."
+
+          mkdir -p "$THEOS/toolchain"
+
+          curl -L \
+            --fail \
+            --retry 3 \
+            -o /tmp/iOSToolchain.tar.xz \
+            https://github.com/theos/llvm-project/releases/latest/download/iOSToolchain.tar.xz
+
+          file /tmp/iOSToolchain.tar.xz
+
+          tar -xJf /tmp/iOSToolchain.tar.xz \
+            -C "$THEOS/toolchain"
+
+      - name: Install iOS SDK
+        run: |
+          mkdir -p "$THEOS/sdks"
+
+          git clone --depth=1 \
+            https://github.com/theos/sdks.git \
             /tmp/theos-sdks
 
-          mkdir -p $THEOS/sdks
+          echo "Available SDKs:"
+          find /tmp/theos-sdks \
+            -maxdepth 1 \
+            -type d \
+            -name 'iPhoneOS*.sdk' \
+            -print
 
           if [ -d "/tmp/theos-sdks/iPhoneOS16.5.sdk" ]; then
-            cp -R /tmp/theos-sdks/iPhoneOS16.5.sdk \
-              $THEOS/sdks/
+            cp -R \
+              "/tmp/theos-sdks/iPhoneOS16.5.sdk" \
+              "$THEOS/sdks/"
           else
-            echo "iPhoneOS16.5.sdk not found"
-            ls -la /tmp/theos-sdks
+            echo "iPhoneOS16.5.sdk not found."
             exit 1
           fi
 
-      - name: Install LLVM toolchain
+      - name: Verify Theos
         run: |
-          export THEOS=$HOME/theos
+          echo "======================================"
+          echo "THEOS"
+          echo "======================================"
 
-          mkdir -p $THEOS/toolchain/linux/iphone/bin
+          echo "$THEOS"
 
-          git clone \
-            https://github.com/theos/sdks.git \
-            /tmp/theos-sdk-check 2>/dev/null || true
+          echo
+          echo "======================================"
+          echo "SDK"
+          echo "======================================"
 
-          curl -L \
-            https://github.com/theos/llvm-project/releases/latest/download/clang+llvm-iphone-linux.tar.xz \
-            -o /tmp/iphone-llvm.tar.xz || true
+          find "$THEOS/sdks" \
+            -maxdepth 1 \
+            -type d \
+            -name '*.sdk' \
+            -print
 
-          if [ -s /tmp/iphone-llvm.tar.xz ]; then
-            mkdir -p /tmp/iphone-llvm
-            tar -xf /tmp/iphone-llvm.tar.xz \
-              -C /tmp/iphone-llvm \
-              --strip-components=1
+          echo
+          echo "======================================"
+          echo "CLANG"
+          echo "======================================"
 
-            if [ -f /tmp/iphone-llvm/bin/clang ]; then
-              cp /tmp/iphone-llvm/bin/clang \
-                $THEOS/toolchain/linux/iphone/bin/
+          "$THEOS/toolchain/linux/iphone/bin/clang" \
+            --version
 
-              cp /tmp/iphone-llvm/bin/clang++ \
-                $THEOS/toolchain/linux/iphone/bin/ \
-                2>/dev/null || true
-
-              cp /tmp/iphone-llvm/bin/ld.lld \
-                $THEOS/toolchain/linux/iphone/bin/ \
-                2>/dev/null || true
-            fi
-          fi
-
-      - name: Check Theos
-        run: |
-          export THEOS=$HOME/theos
-
-          echo "THEOS=$THEOS"
-
-          ls -la $THEOS
-
-          echo "=== SDK ==="
-          ls -la $THEOS/sdks
-
-          echo "=== Toolchain ==="
-          ls -la $THEOS/toolchain/linux/iphone/bin || true
-
-      - name: Build package
-        env:
-          THEOS: /home/runner/theos
+      - name: Build
         run: |
           make clean
           make package FINALPACKAGE=1
 
-      - name: Show build result
+      - name: List output
         run: |
-          echo "=== Packages ==="
-          find . -type f \
-            \( -name "*.deb" -o -name "*.dylib" \) \
+          echo "======================================"
+          echo "BUILD OUTPUT"
+          echo "======================================"
+
+          find . \
+            -type f \
+            \( \
+              -name "*.deb" \
+              -o \
+              -name "*.dylib" \
+            \) \
             -print
 
-      - name: Upload artifacts
+      - name: Upload package
         uses: actions/upload-artifact@v4
         with:
           name: SHAHierarchyDump
