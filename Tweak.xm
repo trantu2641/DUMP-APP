@@ -52,8 +52,8 @@ static BOOL SHAIsTopBarCandidate(CGRect frame) {
     CGFloat height = frame.size.height;
 
     /*
-     * Tìm các view có đặc điểm giống
-     * vùng status/top UI khoảng 44-55pt.
+     * Đánh dấu các view có khả năng là
+     * status bar / top container / top UI.
      */
     BOOL heightMatch =
         (height >= 40.0 && height <= 55.0);
@@ -64,11 +64,11 @@ static BOOL SHAIsTopBarCandidate(CGRect frame) {
     return heightMatch && yMatch;
 }
 
-#pragma mark - Global counter
+#pragma mark - View Counter
 
 static NSUInteger gSHAViewCount = 0;
 
-#pragma mark - View Hierarchy Dump
+#pragma mark - View Hierarchy
 
 static void SHADumpView(
     UIView *view,
@@ -153,21 +153,20 @@ static void SHADumpView(
     ];
 
     /*
-     * Đánh dấu view nghi ngờ là top/status UI.
+     * Đánh dấu view nghi ngờ là top UI.
      */
     if (topBar) {
 
-        [output appendString:
-            [NSString stringWithFormat:
-                @"%@  >>> TOP-BAR CANDIDATE <<<\n",
-                indent
-            ]
+        [output appendFormat:
+            @"%@  >>> TOP-BAR CANDIDATE <<<\n",
+            indent
         ];
     }
 
     /*
-     * Tìm UIViewController thông qua responder chain.
-     * Không dùng private API.
+     * Tìm UIViewController chứa view này.
+     *
+     * Dùng responder chain, không dùng private API.
      */
     UIResponder *responder =
         [view nextResponder];
@@ -196,7 +195,7 @@ static void SHADumpView(
     }
 
     /*
-     * Đệ quy toàn bộ subviews.
+     * Dump tất cả subviews.
      */
     NSArray *subviews =
         view.subviews;
@@ -390,7 +389,7 @@ static void SHAPerformDump(void) {
             [output appendString:@"\n"];
 
             /*
-             * iOS 13+ Scene windows.
+             * Lấy tất cả UIWindowScene đang hoạt động.
              */
             NSArray *connectedScenes =
                 application.connectedScenes.allObjects;
@@ -480,12 +479,17 @@ static void SHAPerformDump(void) {
                 (unsigned long)sceneIndex
             ];
 
+            [output appendFormat:
+                @"TOTAL VIEWS IN LAST WINDOW: %lu\n",
+                (unsigned long)gSHAViewCount
+            ];
+
             [output appendString:
                 @"============================================================\n"
             ];
 
             /*
-             * Chọn file theo Bundle ID.
+             * Chọn file output.
              */
             NSString *path = nil;
 
@@ -524,41 +528,13 @@ static void SHAPerformDump(void) {
                     path
                 );
 
-                NSLog(
-                    @"[SHA-DUMP] Views: %lu",
-                    (unsigned long)gSHAViewCount
-                );
-
             } else {
 
                 NSLog(
-                    @"[SHA-DUMP] WRITE ERROR: %@",
+                    @"[SHA-DUMP] ERROR: %@",
                     error
                 );
             }
-        }
-    );
-}
-
-#pragma mark - App Active
-
-static void SHAAppDidBecomeActive(
-    NSNotification *notification
-) {
-
-    (void)notification;
-
-    /*
-     * Cho app thời gian dựng UI hoàn chỉnh.
-     */
-    dispatch_after(
-        dispatch_time(
-            DISPATCH_TIME_NOW,
-            (int64_t)(2 * NSEC_PER_SEC)
-        ),
-        dispatch_get_main_queue(),
-        ^{
-            SHAPerformDump();
         }
     );
 }
@@ -569,6 +545,82 @@ static void SHAAppDidBecomeActive(
 
     @autoreleasepool {
 
+        NSString *bundleID =
+            [[NSBundle mainBundle]
+                bundleIdentifier];
+
+        /*
+         * Chỉ hoạt động với YouTube/Facebook.
+         */
+        BOOL isYouTube =
+            [bundleID
+                isEqualToString:
+                    @"com.google.ios.youtube"];
+
+        BOOL isFacebook =
+            [bundleID
+                isEqualToString:
+                    @"com.facebook.Facebook"];
+
+        if (!isYouTube && !isFacebook) {
+            return;
+        }
+
+        /*
+         * FILE TEST:
+         *
+         * Nếu file này xuất hiện thì chứng minh
+         * dylib thực sự đã được load.
+         */
+        NSString *loadedPath = nil;
+
+        if (isYouTube) {
+
+            loadedPath =
+                @"/var/mobile/Media/SHA-YOUTUBE-LOADED.txt";
+
+        } else {
+
+            loadedPath =
+                @"/var/mobile/Media/SHA-FACEBOOK-LOADED.txt";
+        }
+
+        NSString *loadedText =
+            [NSString stringWithFormat:
+                @"SHAHierarchyDump loaded successfully\n"
+                 "Bundle ID: %@\n"
+                 "iOS: %@\n"
+                 "Date: %@\n",
+                bundleID ?: @"Unknown",
+                UIDevice.currentDevice.systemVersion,
+                [NSDate date]
+            ];
+
+        NSError *writeError = nil;
+
+        [loadedText writeToFile:
+            loadedPath
+                     atomically:YES
+                       encoding:NSUTF8StringEncoding
+                          error:&writeError];
+
+        /*
+         * Dump sau khi app dựng UI.
+         */
+        dispatch_after(
+            dispatch_time(
+                DISPATCH_TIME_NOW,
+                (int64_t)(3 * NSEC_PER_SEC)
+            ),
+            dispatch_get_main_queue(),
+            ^{
+                SHAPerformDump();
+            }
+        );
+
+        /*
+         * Dump mỗi lần app active.
+         */
         [[NSNotificationCenter defaultCenter]
             addObserverForName:
                 UIApplicationDidBecomeActiveNotification
@@ -577,16 +629,24 @@ static void SHAAppDidBecomeActive(
             usingBlock:
                 ^(NSNotification *notification) {
 
-                    SHAAppDidBecomeActive(
-                        notification
+                    (void)notification;
+
+                    dispatch_after(
+                        dispatch_time(
+                            DISPATCH_TIME_NOW,
+                            (int64_t)(2 * NSEC_PER_SEC)
+                        ),
+                        dispatch_get_main_queue(),
+                        ^{
+                            SHAPerformDump();
+                        }
                     );
                 }
         ];
 
         NSLog(
-            @"[SHA-DUMP] Loaded: %@",
-            [[NSBundle mainBundle]
-                bundleIdentifier]
+            @"[SHA-DUMP] Loaded into %@",
+            bundleID
         );
     }
 }
