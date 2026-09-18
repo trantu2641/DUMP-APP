@@ -2,10 +2,10 @@
 #import <unistd.h>
 
 __attribute__((constructor))
-static void SHAHierarchyDumpInit(void)
+static void SHAInit(void)
 {
-    @autoreleasepool {
-
+    @autoreleasepool
+    {
         NSString *bundle =
             [[NSBundle mainBundle] bundleIdentifier];
 
@@ -18,12 +18,17 @@ static void SHAHierarchyDumpInit(void)
                 getpid()
             ];
 
-        NSString *path =
-            @"/var/mobile/Media/SHA-DUMP-TEST.txt";
+        NSArray<NSString *> *paths = @[
+            @"/var/mobile/Media/SHA-DUMP-TEST.txt",
+            @"/tmp/SHA-DUMP-TEST.txt"
+        ];
 
-        [text writeToFile:path
-              atomically:YES
-                encoding:NSUTF8StringEncoding
-                   error:nil];
+        for (NSString *path in paths)
+        {
+            [text writeToFile:path
+                   atomically:YES
+                     encoding:NSUTF8StringEncoding
+                        error:nil];
+        }
     }
 }
