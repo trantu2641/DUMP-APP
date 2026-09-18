@@ -1,13 +1,20 @@
-TARGET := iphone:clang:latest:16.0
+<?xml version="1.0" encoding="UTF-8"?>
 
-ARCHS = arm64 arm64e
+<!DOCTYPE plist PUBLIC
+"-//Apple//DTD PLIST 1.0//EN"
+"http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 
-include $(THEOS)/makefiles/common.mk
+<plist version="1.0">
+<dict>
+    <key>Filter</key>
+    <dict>
+        <key>Bundles</key>
+        <array>
+            <string>com.google.ios.youtube</string>
+        </array>
 
-TWEAK_NAME = SHAHierarchyDump
-
-SHAHierarchyDump_FILES = Tweak.xm
-SHAHierarchyDump_CFLAGS = -fobjc-arc
-SHAHierarchyDump_FRAMEWORKS = Foundation
-
-include $(THEOS_MAKE_PATH)/tweak.mk
+        <key>Mode</key>
+        <string>Any</string>
+    </dict>
+</dict>
+</plist>
