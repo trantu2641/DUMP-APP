@@ -9,30 +9,14 @@ jobs:
 
     steps:
 
-      # ==========================================
-      # CHECKOUT
-      # ==========================================
-
       - name: Checkout
         uses: actions/checkout@v4
-
-
-      # ==========================================
-      # DEPENDENCIES
-      # ==========================================
 
       - name: Install dependencies
         run: |
           set -e
-
           brew update
-
           brew install ldid
-
-
-      # ==========================================
-      # ROOT HIDE THEOS
-      # ==========================================
 
       - name: Install RootHide Theos
         run: |
@@ -45,23 +29,13 @@ jobs:
           echo "THEOS=$GITHUB_WORKSPACE/theos" \
             >> "$GITHUB_ENV"
 
-
-      # ==========================================
-      # THEOS SDKS
-      # ==========================================
-
-      - name: Download Theos SDK repository
+      - name: Download SDKs
         run: |
           set -e
 
           git clone --depth 1 \
             https://github.com/theos/sdks.git \
             "$GITHUB_WORKSPACE/sdks"
-
-
-      # ==========================================
-      # INSTALL IPHONEOS SDK
-      # ==========================================
 
       - name: Install iPhoneOS SDK
         run: |
@@ -76,83 +50,14 @@ jobs:
             | sort -V \
             | tail -n 1)
 
-          if [ -z "$SDK" ]; then
+          test -n "$SDK"
 
-            echo "ERROR: iPhoneOS SDK not found."
-
-            find "$GITHUB_WORKSPACE/sdks" \
-              -maxdepth 2 \
-              -type d \
-              -name "*.sdk"
-
-            exit 1
-
-          fi
-
-          echo "================================"
-          echo "Using SDK"
-          echo "================================"
-
+          echo "Using SDK:"
           echo "$SDK"
 
           cp -R "$SDK" "$THEOS/sdks/"
 
-
-      # ==========================================
-      # VERIFY THEOS
-      # ==========================================
-
-      - name: Verify Theos
-        run: |
-          set -e
-
-          echo "================================"
-          echo "THEOS"
-          echo "================================"
-
-          echo "$THEOS"
-
-          test -f \
-            "$THEOS/makefiles/common.mk"
-
-          echo "Theos OK."
-
-          echo
-          echo "================================"
-          echo "SDKs"
-          echo "================================"
-
-          find "$THEOS/sdks" \
-            -maxdepth 1 \
-            -type d \
-            -name "iPhoneOS*.sdk" \
-            -print
-
-
-      # ==========================================
-      # VERIFY ROOT HIDE SCHEME
-      # ==========================================
-
-      - name: Verify RootHide package scheme
-        run: |
-          set -e
-
-          echo "Checking RootHide Theos..."
-
-          grep -R \
-            "roothide" \
-            "$THEOS/makefiles" \
-            | head -n 20 || true
-
-          echo
-          echo "RootHide Theos ready."
-
-
-      # ==========================================
-      # BUILD ROOT HIDE DEB
-      # ==========================================
-
-      - name: Build RootHide package
+      - name: Build RootHide DEB
         run: |
           set -e
 
@@ -164,65 +69,92 @@ jobs:
             FINALPACKAGE=1 \
             THEOS_PACKAGE_SCHEME=roothide
 
-
       # ==========================================
-      # VERIFY DEB
+      # HARD CHECK PACKAGE
       # ==========================================
 
-      - name: Verify generated DEB
+      - name: Verify DEB structure
         run: |
           set -e
 
-          echo
-          echo "================================"
-          echo "Generated DEB"
-          echo "================================"
-
-          find "$GITHUB_WORKSPACE/packages" \
-            -type f \
-            -name "*.deb" \
-            -print
-
-          DEB=$(find \
-            "$GITHUB_WORKSPACE/packages" \
+          DEB=$(find packages \
             -type f \
             -name "*.deb" \
             | head -n 1)
 
           if [ -z "$DEB" ]; then
-
-            echo "ERROR: No DEB generated."
-
+            echo "ERROR: DEB not generated"
             exit 1
-
           fi
 
-          echo
-          echo "DEB FILE:"
+          echo "======================================"
+          echo "DEB:"
           echo "$DEB"
+          echo "======================================"
 
           echo
-          echo "FILE INFORMATION:"
-
-          file "$DEB"
+          echo "PACKAGE CONTENT:"
+          dpkg-deb -c "$DEB"
 
           echo
-          echo "SIZE:"
+          echo "======================================"
+          echo "CHECK DYLIB"
+          echo "======================================"
 
-          ls -lh "$DEB"
+          if ! dpkg-deb -c "$DEB" | grep -q "SHAHierarchyDump.dylib"; then
+            echo "ERROR: SHAHierarchyDump.dylib NOT FOUND IN DEB"
+            exit 1
+          fi
 
+          echo "OK: dylib found"
 
-      # ==========================================
-      # UPLOAD REAL DEB
-      # ==========================================
+          echo
+          echo "======================================"
+          echo "CHECK PLIST"
+          echo "======================================"
 
-      - name: Upload RootHide DEB
+          if ! dpkg-deb -c "$DEB" | grep -q "SHAHierarchyDump.plist"; then
+            echo "ERROR: SHAHierarchyDump.plist NOT FOUND IN DEB"
+            exit 1
+          fi
+
+          echo "OK: plist found"
+
+          echo
+          echo "======================================"
+          echo "EXTRACT PACKAGE"
+          echo "======================================"
+
+          rm -rf /tmp/shadump
+          mkdir -p /tmp/shadump
+
+          dpkg-deb -x "$DEB" /tmp/shadump
+
+          find /tmp/shadump \
+            -type f \
+            -print
+
+          echo
+          echo "======================================"
+          echo "PLIST LOCATION"
+          echo "======================================"
+
+          find /tmp/shadump \
+            -name "SHAHierarchyDump.plist" \
+            -print
+
+          echo
+          echo "======================================"
+          echo "DYLIB INFORMATION"
+          echo "======================================"
+
+          find /tmp/shadump \
+            -name "SHAHierarchyDump.dylib" \
+            -exec file {} \;
+
+      - name: Upload DEB
         uses: actions/upload-artifact@v4
-
         with:
-
           name: SHAHierarchyDump-RootHide-DEB
-
           path: packages/*.deb
-
           if-no-files-found: error
