@@ -1,8 +1,10 @@
 Package: com.congtu.shahierarchydump
 Name: SHA Hierarchy Dump
-Version: 1.0.0
-Architecture: iphoneos-arm64
+Version: 1.0.1
+Architecture: iphoneos-arm64e
 Description: YouTube hierarchy diagnostic tweak
 Maintainer: ConGTu
 Author: ConGTu
 Section: Tweaks
+Pre-Depends: rootless-compat (>= 0.9)
+Depends: mobilesubstrate
