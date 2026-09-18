@@ -10,7 +10,4 @@ SHAHierarchyDump_FILES = Tweak.xm
 SHAHierarchyDump_CFLAGS = -fobjc-arc
 SHAHierarchyDump_FRAMEWORKS = Foundation
 
-SHAHierarchyDump_PLIST_FILES = \
-    SHAHierarchyDump.plist
-
 include $(THEOS_MAKE_PATH)/tweak.mk
