@@ -2,7 +2,7 @@ Package: com.congtu.shahierarchydump
 Name: SHA Hierarchy Dump
 Version: 1.0.0
 Architecture: iphoneos-arm64
-Description: Dump UIKit view hierarchy for YouTube and Facebook
+Description: YouTube hierarchy diagnostic tweak
 Maintainer: ConGTu
 Author: ConGTu
 Section: Tweaks
