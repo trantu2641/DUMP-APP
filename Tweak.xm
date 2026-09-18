@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#import <unistd.h>
 
 %ctor {
     @autoreleasepool {
@@ -8,17 +9,19 @@
 
         NSString *text =
             [NSString stringWithFormat:
-                @"SHAHierarchyDump loaded\n"
-                 "Bundle = %@\n"
-                 "PID = %d\n",
+                @"SHAHierarchyDump LOADED\n"
+                 "Bundle: %@\n"
+                 "PID: %d\n",
                 bundle ?: @"NULL",
                 getpid()
             ];
 
-        [text writeToFile:
-            @"/var/mobile/Media/SHA-DUMP-TEST.txt"
-                 atomically:YES
-                   encoding:NSUTF8StringEncoding
-                      error:nil];
+        NSString *path =
+            @"/var/mobile/Media/SHA-DUMP-TEST.txt";
+
+        [text writeToFile:path
+              atomically:YES
+                encoding:NSUTF8StringEncoding
+                   error:nil];
     }
 }
