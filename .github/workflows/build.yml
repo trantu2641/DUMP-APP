@@ -9,29 +9,14 @@ jobs:
 
     steps:
 
-      # ==========================================
-      # CHECKOUT
-      # ==========================================
-
       - name: Checkout
         uses: actions/checkout@v4
-
-
-      # ==========================================
-      # DEPENDENCIES
-      # ==========================================
 
       - name: Install dependencies
         run: |
           set -e
-
           brew update
           brew install ldid
-
-
-      # ==========================================
-      # ROOT HIDE THEOS
-      # ==========================================
 
       - name: Install RootHide Theos
         run: |
@@ -44,93 +29,33 @@ jobs:
           echo "THEOS=$GITHUB_WORKSPACE/theos" \
             >> "$GITHUB_ENV"
 
-
-      # ==========================================
-      # THEOS SDKS
-      # ==========================================
-
-      - name: Download SDKs
-        run: |
-          set -e
-
-          git clone --depth 1 \
-            https://github.com/theos/sdks.git \
-            "$GITHUB_WORKSPACE/sdks"
-
-
-      # ==========================================
-      # INSTALL IPHONEOS SDK
-      # ==========================================
-
-      - name: Install iPhoneOS SDK
+      - name: Install iPhoneOS 16.5 SDK
         run: |
           set -e
 
           mkdir -p "$THEOS/sdks"
 
-          SDK=$(find "$GITHUB_WORKSPACE/sdks" \
-            -maxdepth 1 \
-            -type d \
-            -name "iPhoneOS*.sdk" \
-            | sort -V \
-            | tail -n 1)
+          git clone --depth 1 \
+            https://github.com/theos/sdks.git \
+            "$GITHUB_WORKSPACE/sdks"
 
-          if [ -z "$SDK" ]; then
-            echo "ERROR: iPhoneOS SDK not found."
+          SDK="$GITHUB_WORKSPACE/sdks/iPhoneOS16.5.sdk"
 
+          if [ ! -d "$SDK" ]; then
+            echo "ERROR: iPhoneOS16.5.sdk not found"
             find "$GITHUB_WORKSPACE/sdks" \
               -maxdepth 2 \
               -type d \
               -name "*.sdk"
-
             exit 1
           fi
 
-          echo "======================================"
-          echo "Using SDK"
-          echo "======================================"
-
-          echo "$SDK"
-
           cp -R "$SDK" "$THEOS/sdks/"
 
+          echo "Using:"
+          ls -ld "$THEOS/sdks/iPhoneOS16.5.sdk"
 
-      # ==========================================
-      # VERIFY THEOS
-      # ==========================================
-
-      - name: Verify Theos
-        run: |
-          set -e
-
-          echo "======================================"
-          echo "THEOS"
-          echo "======================================"
-
-          echo "$THEOS"
-
-          test -f \
-            "$THEOS/makefiles/common.mk"
-
-          echo "Theos OK."
-
-          echo
-          echo "======================================"
-          echo "SDKs"
-          echo "======================================"
-
-          find "$THEOS/sdks" \
-            -maxdepth 1 \
-            -type d \
-            -name "iPhoneOS*.sdk" \
-            -print
-
-
-      # ==========================================
-      # BUILD ROOT HIDE DEB
-      # ==========================================
-
-      - name: Build RootHide DEB
+      - name: Build
         run: |
           set -e
 
@@ -142,12 +67,7 @@ jobs:
             FINALPACKAGE=1 \
             THEOS_PACKAGE_SCHEME=roothide
 
-
-      # ==========================================
-      # VERIFY DEB STRUCTURE
-      # ==========================================
-
-      - name: Verify DEB structure
+      - name: Inspect DEB
         run: |
           set -e
 
@@ -157,149 +77,105 @@ jobs:
             | head -n 1)
 
           if [ -z "$DEB" ]; then
-            echo "ERROR: DEB not generated."
+            echo "ERROR: no DEB"
             exit 1
           fi
 
-          echo
-          echo "======================================"
+          echo "================================"
           echo "DEB"
-          echo "======================================"
-
+          echo "================================"
           echo "$DEB"
-
-          echo
-          echo "======================================"
-          echo "FILE INFORMATION"
-          echo "======================================"
 
           file "$DEB"
 
-          echo
-          echo "======================================"
-          echo "DEB ARCHIVE"
-          echo "======================================"
+          rm -rf /tmp/sha-deb
+          mkdir -p /tmp/sha-deb
 
-          ar -t "$DEB"
+          cd /tmp/sha-deb
 
-          echo
-          echo "======================================"
-          echo "EXTRACT DEB"
-          echo "======================================"
-
-          rm -rf /tmp/shadump
-          mkdir -p /tmp/shadump
-
-          cd /tmp/shadump
-
-          ar -x \
-            "$GITHUB_WORKSPACE/$DEB"
+          ar -x "$GITHUB_WORKSPACE/$DEB"
 
           echo
-          echo "Extracted:"
-          ls -lah
+          echo "================================"
+          echo "CONTROL"
+          echo "================================"
+
+          tar -xOf control.tar.* ./control
 
           echo
-          echo "======================================"
-          echo "DATA ARCHIVE"
-          echo "======================================"
+          echo "================================"
+          echo "PACKAGE CONTENT"
+          echo "================================"
 
-          DATA=$(find /tmp/shadump \
-            -maxdepth 1 \
+          mkdir root
+
+          tar -xf data.tar.* -C root
+
+          find root \
             -type f \
-            -name "data.tar.*" \
-            | head -n 1)
-
-          if [ -z "$DATA" ]; then
-            echo "ERROR: data archive not found."
-            exit 1
-          fi
-
-          echo "DATA:"
-          echo "$DATA"
+            -o -type l \
+            | sort
 
           echo
-          echo "======================================"
-          echo "PACKAGE FILES"
-          echo "======================================"
-
-          mkdir -p /tmp/shadump/root
-
-          tar -xf "$DATA" \
-            -C /tmp/shadump/root
-
-          find /tmp/shadump/root \
-            -type f \
-            -print
-
-          echo
-          echo "======================================"
+          echo "================================"
           echo "CHECK DYLIB"
-          echo "======================================"
+          echo "================================"
 
-          DYLIB=$(find /tmp/shadump/root \
+          DYLIB=$(find root \
             -name "SHAHierarchyDump.dylib" \
             | head -n 1)
 
-          if [ -z "$DYLIB" ]; then
-            echo "ERROR: SHAHierarchyDump.dylib NOT FOUND."
-            exit 1
-          fi
+          test -n "$DYLIB"
 
-          echo "DYLIB FOUND:"
+          echo "FOUND:"
           echo "$DYLIB"
 
           echo
-          echo "======================================"
+          echo "================================"
           echo "CHECK PLIST"
-          echo "======================================"
+          echo "================================"
 
-          PLIST=$(find /tmp/shadump/root \
+          PLIST=$(find root \
             -name "SHAHierarchyDump.plist" \
             | head -n 1)
 
-          if [ -z "$PLIST" ]; then
-            echo "ERROR: SHAHierarchyDump.plist NOT FOUND."
-            exit 1
-          fi
+          test -n "$PLIST"
 
-          echo "PLIST FOUND:"
+          echo "FOUND:"
           echo "$PLIST"
 
           echo
-          echo "======================================"
-          echo "PLIST CONTENT"
-          echo "======================================"
+          echo "================================"
+          echo "CHECK INSTALL DIRECTORY"
+          echo "================================"
 
-          cat "$PLIST"
+          EXPECTED="root/Library/MobileSubstrate/DynamicLibraries"
+
+          test -f \
+            "$EXPECTED/SHAHierarchyDump.dylib"
+
+          test -f \
+            "$EXPECTED/SHAHierarchyDump.plist"
+
+          echo "PASS:"
+          echo "$EXPECTED/SHAHierarchyDump.dylib"
+          echo "$EXPECTED/SHAHierarchyDump.plist"
 
           echo
-          echo "======================================"
-          echo "DYLIB INFORMATION"
-          echo "======================================"
+          echo "================================"
+          echo "PLIST"
+          echo "================================"
 
-          file "$DYLIB"
+          cat "$EXPECTED/SHAHierarchyDump.plist"
 
           echo
-          echo "======================================"
+          echo "================================"
           echo "SUCCESS"
-          echo "======================================"
+          echo "================================"
 
-          echo "DEB contains:"
-          echo "- SHAHierarchyDump.dylib"
-          echo "- SHAHierarchyDump.plist"
-
-
-      # ==========================================
-      # UPLOAD DEB
-      # ==========================================
-
-      - name: Upload RootHide DEB
+      - name: Upload DEB
         uses: actions/upload-artifact@v4
-
         with:
-          name: SHAHierarchyDump-RootHide-DEB
-
+          name: SHAHierarchyDump-RootHide
           path: packages/*.deb
-
           if-no-files-found: error
