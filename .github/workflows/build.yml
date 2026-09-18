@@ -73,7 +73,7 @@ jobs:
       # HARD CHECK PACKAGE
       # ==========================================
 
-      - name: Verify DEB structure
+            - name: Verify DEB structure
         run: |
           set -e
 
@@ -88,69 +88,128 @@ jobs:
           fi
 
           echo "======================================"
-          echo "DEB:"
-          echo "$DEB"
+          echo "DEB"
           echo "======================================"
 
+          echo "$DEB"
+
           echo
-          echo "PACKAGE CONTENT:"
-          dpkg-deb -c "$DEB"
+          echo "======================================"
+          echo "FILE INFORMATION"
+          echo "======================================"
+
+          file "$DEB"
+
+          echo
+          echo "======================================"
+          echo "DEB ARCHIVE"
+          echo "======================================"
+
+          ar -t "$DEB"
+
+          echo
+          echo "======================================"
+          echo "EXTRACT DEB"
+          echo "======================================"
+
+          rm -rf /tmp/shadump
+          mkdir -p /tmp/shadump
+
+          cd /tmp/shadump
+
+          ar -x \
+            "$GITHUB_WORKSPACE/$DEB"
+
+          echo
+          echo "Extracted:"
+          ls -lah
+
+          echo
+          echo "======================================"
+          echo "DATA ARCHIVE"
+          echo "======================================"
+
+          DATA=$(find /tmp/shadump \
+            -maxdepth 1 \
+            -type f \
+            -name "data.tar.*" \
+            | head -n 1)
+
+          if [ -z "$DATA" ]; then
+            echo "ERROR: data archive not found"
+            exit 1
+          fi
+
+          echo "$DATA"
+
+          echo
+          echo "======================================"
+          echo "PACKAGE FILES"
+          echo "======================================"
+
+          mkdir -p /tmp/shadump/root
+
+          tar -xf "$DATA" \
+            -C /tmp/shadump/root
+
+          find /tmp/shadump/root \
+            -type f \
+            -print
 
           echo
           echo "======================================"
           echo "CHECK DYLIB"
           echo "======================================"
 
-          if ! dpkg-deb -c "$DEB" | grep -q "SHAHierarchyDump.dylib"; then
-            echo "ERROR: SHAHierarchyDump.dylib NOT FOUND IN DEB"
+          DYLIB=$(find /tmp/shadump/root \
+            -name "SHAHierarchyDump.dylib" \
+            | head -n 1)
+
+          if [ -z "$DYLIB" ]; then
+            echo "ERROR: SHAHierarchyDump.dylib NOT FOUND"
             exit 1
           fi
 
-          echo "OK: dylib found"
+          echo "OK:"
+          echo "$DYLIB"
 
           echo
           echo "======================================"
           echo "CHECK PLIST"
           echo "======================================"
 
-          if ! dpkg-deb -c "$DEB" | grep -q "SHAHierarchyDump.plist"; then
-            echo "ERROR: SHAHierarchyDump.plist NOT FOUND IN DEB"
+          PLIST=$(find /tmp/shadump/root \
+            -name "SHAHierarchyDump.plist" \
+            | head -n 1)
+
+          if [ -z "$PLIST" ]; then
+            echo "ERROR: SHAHierarchyDump.plist NOT FOUND"
             exit 1
           fi
 
-          echo "OK: plist found"
+          echo "OK:"
+          echo "$PLIST"
 
           echo
           echo "======================================"
-          echo "EXTRACT PACKAGE"
+          echo "PLIST CONTENT"
           echo "======================================"
 
-          rm -rf /tmp/shadump
-          mkdir -p /tmp/shadump
-
-          dpkg-deb -x "$DEB" /tmp/shadump
-
-          find /tmp/shadump \
-            -type f \
-            -print
-
-          echo
-          echo "======================================"
-          echo "PLIST LOCATION"
-          echo "======================================"
-
-          find /tmp/shadump \
-            -name "SHAHierarchyDump.plist" \
-            -print
+          cat "$PLIST"
 
           echo
           echo "======================================"
           echo "DYLIB INFORMATION"
           echo "======================================"
 
-          find /tmp/shadump \
-            -name "SHAHierarchyDump.dylib" \
-            -exec file {} \;
+          file "$DYLIB"
+
+          echo
+          echo "======================================"
+          echo "SUCCESS"
+          echo "======================================"
+
+          echo "DEB contains both dylib and plist."
 
       - name: Upload DEB
         uses: actions/upload-artifact@v4
