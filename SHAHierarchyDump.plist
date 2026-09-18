@@ -6,16 +6,15 @@
 
 <plist version="1.0">
 <dict>
-
     <key>Filter</key>
     <dict>
-
         <key>Bundles</key>
         <array>
             <string>com.google.ios.youtube</string>
         </array>
 
+        <key>Mode</key>
+        <string>Any</string>
     </dict>
-
 </dict>
 </plist>
