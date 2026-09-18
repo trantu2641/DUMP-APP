@@ -1,7 +1,9 @@
 #import <Foundation/Foundation.h>
 #import <unistd.h>
 
-%ctor {
+__attribute__((constructor))
+static void SHAHierarchyDumpInit(void)
+{
     @autoreleasepool {
 
         NSString *bundle =
